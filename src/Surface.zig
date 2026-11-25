@@ -5520,6 +5520,17 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             },
         ),
 
+        .move_split => |direction| return try self.rt_app.performAction(
+            .{ .surface = self },
+            .move_split,
+            switch (direction) {
+                inline else => |tag| @field(
+                    apprt.action.GotoSplit,
+                    @tagName(tag),
+                ),
+            },
+        ),
+
         .goto_window => |direction| return try self.rt_app.performAction(
             .{ .surface = self },
             .goto_window,

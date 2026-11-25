@@ -713,6 +713,8 @@ pub const Application = extern struct {
 
             .goto_split => return Action.gotoSplit(target, value),
 
+            .move_split => return false,
+
             .goto_window => return Action.gotoWindow(value),
 
             .goto_tab => return Action.gotoTab(target, value),

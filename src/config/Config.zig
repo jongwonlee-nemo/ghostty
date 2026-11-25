@@ -7310,6 +7310,16 @@ pub const Keybinds = struct {
             );
             try self.set.put(
                 alloc,
+                .{ .key = .{ .physical = .arrow_left }, .mods = .{ .super = true, .alt = true, .shift = true } },
+                .{ .move_split = .left },
+            );
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .physical = .arrow_right }, .mods = .{ .super = true, .alt = true, .shift = true } },
+                .{ .move_split = .right },
+            );
+            try self.set.put(
+                alloc,
                 .{ .key = .{ .physical = .arrow_up }, .mods = .{ .super = true, .ctrl = true } },
                 .{ .resize_split = .{ .up, 10 } },
             );

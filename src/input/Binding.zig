@@ -650,6 +650,10 @@ pub const Action = union(enum) {
     /// (`previous` and `next`).
     goto_split: SplitFocusDirection,
 
+    /// Move the focused split column `left` or `right`. Only the macOS quick
+    /// terminal implements this; other directions do nothing.
+    move_split: SplitFocusDirection,
+
     /// Focus on either the previous window or the next one ('previous', 'next')
     goto_window: GotoWindow,
 
@@ -1478,6 +1482,7 @@ pub const Action = union(enum) {
             .toggle_tab_overview,
             .new_split,
             .goto_split,
+            .move_split,
             .goto_window,
             .toggle_split_zoom,
             .toggle_readonly,

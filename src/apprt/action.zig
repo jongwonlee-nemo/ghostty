@@ -367,6 +367,9 @@ pub const Action = union(Key) {
     /// Set the application window theme for this session.
     set_window_theme: WindowTheme,
 
+    /// Move the focused split column left or right.
+    move_split: GotoSplit,
+
     /// Sync with: ghostty_action_tag_e
     pub const Key = enum(c_int) {
         quit,
@@ -440,6 +443,7 @@ pub const Action = union(Key) {
         move_tab_to_new_window,
         resize_window,
         set_window_theme,
+        move_split,
 
         test "ghostty.h Action.Key" {
             try lib.checkGhosttyHEnum(Key, "GHOSTTY_ACTION_");

@@ -615,6 +615,9 @@ extension Ghostty {
             case GHOSTTY_ACTION_GOTO_SPLIT:
                 return gotoSplit(app, target: target, direction: action.action.goto_split)
 
+            case GHOSTTY_ACTION_MOVE_SPLIT:
+                return moveSplit(app, target: target, direction: action.action.move_split)
+
             case GHOSTTY_ACTION_GOTO_WINDOW:
                 return gotoWindow(app, target: target, direction: action.action.goto_window)
 
@@ -1358,6 +1361,12 @@ extension Ghostty {
                     // Convert the C API direction to our Swift type
                     guard let splitDirection = SplitFocusDirection.from(direction: direction) else { return false }
 
+                    // The quick terminal carousel navigates its visible columns, rotating at the edges.
+                    if let quick = controller as? QuickTerminalController,
+                       let handled = quick.gotoSplit(from: surfaceView, direction: splitDirection) {
+                        return handled
+                    }
+
                     // Find the current node in the tree
                     guard let targetNode = controller.surfaceTree.root?.node(view: surfaceView) else { return false }
 
@@ -1384,6 +1393,19 @@ extension Ghostty {
                     assertionFailure()
                     return false
                 }
+        }
+
+        private static func moveSplit(
+            _ app: ghostty_app_t,
+            target: ghostty_target_s,
+            direction: ghostty_action_goto_split_e) -> Bool {
+                // Only the quick terminal carousel can move splits.
+                guard target.tag == GHOSTTY_TARGET_SURFACE,
+                      let surface = target.target.surface,
+                      let surfaceView = self.surfaceView(from: surface),
+                      let controller = surfaceView.window?.windowController as? QuickTerminalController,
+                      let splitDirection = SplitFocusDirection.from(direction: direction) else { return false }
+                return controller.moveSplit(from: surfaceView, direction: splitDirection)
         }
 
         private static func gotoWindow(

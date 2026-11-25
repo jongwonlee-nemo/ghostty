@@ -274,6 +274,15 @@ class QuickTerminalController: BaseTerminalController {
             return
         }
 
+        // Keep the carousel shape (visible pair zoomed) unless a leaf in the pair is zoomed.
+        let cols = to.columns
+        let fixed = SplitTree<Ghostty.SurfaceView>.carousel(cols, ratio: to.pairRatio)
+        let leafZoomed = if case .leaf(let view) = to.zoomed, fixed.zoomed?.node(view: view) != nil { true } else { false }
+        if cols.count >= 3, !leafZoomed, fixed.root != to.root || fixed.zoomed != to.zoomed {
+            surfaceTree = fixed
+            return
+        }
+
         // If we're not empty (e.g. this isn't the first set) and we're
         // not visible, then we animate in. This allows us to show the quick
         // terminal when things such as undo/redo are done.
@@ -318,7 +327,69 @@ class QuickTerminalController: BaseTerminalController {
     ) -> Ghostty.SurfaceView? {
         var config = config ?? Ghostty.SurfaceConfiguration()
         config.environmentVariables["GHOSTTY_QUICK_TERMINAL"] = "1"
-        return super.newSplit(at: oldView, direction: direction, baseConfig: config)
+
+        // Left/right splits add a carousel column beside the current one; up/down split within it.
+        guard direction == .left || direction == .right else {
+            return super.newSplit(at: oldView, direction: direction, baseConfig: config)
+        }
+        var cols = surfaceTree.columns
+        guard let i = cols.firstIndex(where: { $0.node(view: oldView) != nil }),
+              let app = ghostty.app else { return nil }
+        let newView = Ghostty.SurfaceView(app, baseConfig: config)
+        var k = direction == .right ? i + 1 : i
+        cols.insert(.leaf(view: newView), at: k)
+        // Rotate until the new column is in the visible pair.
+        while k > 1 { cols.append(cols.removeFirst()); k -= 1 }
+        replaceSurfaceTree(
+            .carousel(cols, ratio: surfaceTree.pairRatio),
+            moveFocusTo: newView,
+            moveFocusFrom: oldView,
+            undoAction: "New Split")
+        return newView
+    }
+
+    // MARK: Carousel
+
+    /// goto_split over the visible pair; left/right past an edge rotates in the next column.
+    /// Returns nil with fewer than three columns so normal navigation applies.
+    func gotoSplit(from view: Ghostty.SurfaceView, direction: Ghostty.SplitFocusDirection) -> Bool? {
+        var cols = surfaceTree.columns
+        guard cols.count >= 3 else { return nil }
+        let pair = SplitTree<Ghostty.SurfaceView>.carousel(Array(cols.prefix(2)), ratio: 0.5)
+        guard let node = pair.root?.node(view: view) else { return false }
+
+        let target: Ghostty.SurfaceView
+        if let next = pair.focusTarget(for: direction.toSplitTreeFocusDirection(), from: node) {
+            target = next
+        } else if direction == .right {
+            cols.append(cols.removeFirst())
+            target = cols[1].leftmostLeaf()
+        } else if direction == .left {
+            cols.insert(cols.removeLast(), at: 0)
+            target = cols[0].leftmostLeaf()
+        } else {
+            return false
+        }
+
+        surfaceTree = .carousel(cols, ratio: surfaceTree.pairRatio)
+        DispatchQueue.main.async { Ghostty.moveFocus(to: target, from: view) }
+        return true
+    }
+
+    /// Swap the focused column with its left/right neighbor, rotating to keep it visible.
+    func moveSplit(from view: Ghostty.SurfaceView, direction: Ghostty.SplitFocusDirection) -> Bool {
+        var cols = surfaceTree.columns
+        let step = direction == .right ? 1 : direction == .left ? -1 : 0
+        guard step != 0, cols.count >= 2,
+              let i = cols.prefix(2).firstIndex(where: { $0.node(view: view) != nil }) else { return false }
+        let j = (i + step + cols.count) % cols.count
+        cols.swapAt(i, j)
+        if j > 1 {
+            if step > 0 { cols.append(cols.removeFirst()) } else { cols.insert(cols.removeLast(), at: 0) }
+        }
+        surfaceTree = .carousel(cols, ratio: surfaceTree.pairRatio)
+        DispatchQueue.main.async { Ghostty.moveFocus(to: view) }
+        return true
     }
 
     // MARK: Methods
@@ -795,6 +866,38 @@ class QuickTerminalController: BaseTerminalController {
             Dock.autoHideEnabled = previousAutoHide
             hidden = false
         }
+    }
+}
+
+/// The quick terminal lays out left/right columns as a carousel: the first two are
+/// shown and the rest stay in the tree, hidden by zooming the visible pair.
+extension SplitTree {
+    /// Top-level left/right columns in order; the first two are the visible pair.
+    var columns: [Node] {
+        func flatten(_ node: Node) -> [Node] {
+            if case .split(let s) = node, s.direction == .horizontal { return flatten(s.left) + flatten(s.right) }
+            return [node]
+        }
+        return root.map(flatten) ?? []
+    }
+
+    /// Divider ratio of the visible pair.
+    var pairRatio: Double {
+        guard case .split(let s) = root, s.direction == .horizontal else { return 0.5 }
+        if case .split(let pair) = s.left, pair.direction == .horizontal { return pair.ratio }
+        return s.ratio
+    }
+
+    /// Shows `cols[0]` and `cols[1]`; any further columns are chained after and hidden.
+    static func carousel(_ cols: [Node], ratio: Double) -> Self {
+        func hsplit(_ l: Node, _ r: Node, _ ratio: Double = 0.5) -> Node {
+            .split(.init(direction: .horizontal, ratio: ratio, left: l, right: r))
+        }
+        guard cols.count >= 2 else { return .init(root: cols.first, zoomed: nil) }
+        let pair = hsplit(cols[0], cols[1], ratio)
+        guard cols.count >= 3 else { return .init(root: pair, zoomed: nil) }
+        let rest = cols[2...].dropLast().reversed().reduce(cols.last!) { hsplit($1, $0) }
+        return .init(root: hsplit(pair, rest), zoomed: pair)
     }
 }
 
