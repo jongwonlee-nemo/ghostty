@@ -23,22 +23,7 @@ class GlobalEventTap {
     private var enableTimer: Timer?
 
     // Private init so it can't be constructed outside of our singleton
-    private init() {
-        // The tap can silently stop delivering events after sleep or a screen lock
-        // (upstream #11883, #12294), so recreate it like a relaunch would.
-        let recreate: (Notification) -> Void = { _ in GlobalEventTap.shared.recreate() }
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: recreate)
-        DistributedNotificationCenter.default().addObserver(
-            forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main, using: recreate)
-    }
-
-    private func recreate() {
-        guard eventTap != nil else { return }
-        Self.logger.warning("recreating global event tap after wake or unlock")
-        disable()
-        enable()
-    }
+    private init() {}
 
     deinit {
         disable()
@@ -173,8 +158,7 @@ private func cgEventFlagsChangedHandler(
     // Build our event input and call ghostty
     let key_ev = event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)
     if ghostty_app_key(ghostty, key_ev) {
-        // Notice level so it's persisted; only bound global keys reach here.
-        GlobalEventTap.logger.notice("global key event handled event=\(event, privacy: .public)")
+        GlobalEventTap.logger.info("global key event handled event=\(event, privacy: .public)")
         return nil
     }
 
